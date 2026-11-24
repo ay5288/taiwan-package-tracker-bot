@@ -26,18 +26,19 @@ line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
 LOCAL_PACKAGES = [
-    {"pkg_id": "P1001", "store": "7-11超商", "item": "蝦皮生活百貨包裹", "code3": "852", "cod": 390, "due": "明日 23:59 截止", "urgent": True},
-    {"pkg_id": "P1002", "store": "蝦皮店到店", "item": "手機殼與充電線", "code3": "109", "cod": 0, "due": "3天內取貨（已付款）", "urgent": False},
+    {"pkg_id": "P1001", "store": "蝦皮店到店(五股成泰店)", "item": "蝦皮生活百貨包裹", "code3": "839201", "cod": 390, "due": "明日 23:59 截止", "urgent": True},
+    {"pkg_id": "P1002", "store": "7-11超商", "item": "手機殼與充電線", "code3": "852", "cod": 0, "due": "3天內取貨（已付款）", "urgent": False},
     {"pkg_id": "P1003", "store": "社區警衛室", "item": "momo 衛生紙箱購", "code3": "A04", "cod": 0, "due": "管理室代收中", "urgent": False}
 ]
 
 def parse_pickup_sms(text: str):
     t = text.strip()
     store = "7-11超商"
-    if any(k in t for k in ["全家", "FamilyMart", "Fami"]):
+    if any(k in t for k in ["蝦皮店到店", "智取店", "蝦皮"]):
+        m_branch = re.search(r"(?:店到店|智取店)[-\s【\[]*([^\s】\]，,。]{2,10}(?:店|門市))", t)
+        store = f"蝦皮店到店({m_branch.group(1)})" if m_branch else "蝦皮店到店"
+    elif any(k in t for k in ["全家", "FamilyMart", "Fami"]):
         store = "全家超商"
-    elif any(k in t for k in ["蝦皮店到店", "智取店"]):
-        store = "蝦皮店到店"
     elif any(k in t for k in ["萊爾富", "Hi-Life"]):
         store = "萊爾富超商"
     elif any(k in t for k in ["OK", "ok超商"]):
@@ -50,22 +51,22 @@ def parse_pickup_sms(text: str):
     m_cod = re.search(r"(?:金額|應付|代收|貨到付款|NT\$|\$)\s*[:：]?\s*(\d{2,6})", t)
     cod = int(m_cod.group(1)) if m_cod else 0
 
-    m_code = re.search(r"(?:末三碼|末3碼|取貨碼|編號|貨號|號碼)\s*[:：#]?\s*([A-Za-z0-9]{3,6})", t)
+    m_code = re.search(r"(?:取件碼|取貨碼|驗證碼|末三碼|末3碼|編號|貨號)\s*[:：#]?\s*([A-Za-z0-9]{3,8})", t)
     if m_code:
-        code3 = m_code.group(1)[-3:].upper()
+        code3 = m_code.group(1).upper()
     else:
-        nums = re.findall(r"\b\d{3}\b", t)
+        nums = re.findall(r"\b\d{3,6}\b", t)
         code3 = nums.pop(0) if nums else "888"
 
     m_due = re.search(r"(\d{1,2}[/月-]\d{1,2}日?)", t)
-    due = f"{m_due.group(1)} 前取貨" if m_due else "5日內截止取貨"
+    due = f"{m_due.group(1)} 前取貨" if m_due else "5日內截止取貨（注意期限）"
 
-    item_name = "網購包裹"
-    for kw in ["蝦皮", "momo", "酷澎", "Coupang", "PChome", "淘寶", "博客來", "Uniqlo", "生活市集"]:
+    item_name = "蝦皮網購包裹" if "蝦皮" in t else "網購包裹"
+    for kw in ["momo", "酷澎", "Coupang", "PChome", "淘寶", "博客來", "Uniqlo"]:
         if kw.lower() in t.lower():
             item_name = f"{kw} 網購包裹"
             break
-    if len(t) <= 30 and not any(x in t for x in ["簡訊", "門市", "請於", "截止"]):
+    if len(t) <= 30 and not any(x in t for x in ["簡訊", "門市", "請於", "截止", "取件碼"]):
         cleaned = re.sub(r"\d{2,6}元?", "", t).strip()
         if cleaned:
             item_name = cleaned[:18]
@@ -86,11 +87,11 @@ def get_user_name(uid: str):
 
 @app.get("/")
 def root():
-    return {"status": "Online", "service": "Taiwan Package Tracker Pro App 2.0"}
+    return {"status": "Online", "service": "Taiwan Package & Shopee Tracker Pro 2.0"}
 
 @app.post("/api/pkg_add")
 async def web_pkg_add(
-    store: str = Form("7-11超商"),
+    store: str = Form("蝦皮店到店"),
     item: str = Form("網購包裹"),
     code3: str = Form("888"),
     cod: int = Form(0),
@@ -101,9 +102,9 @@ async def web_pkg_add(
     is_urg = (urgent == "1") or ("明" in due) or ("今" in due)
     pkg = {
         "pkg_id": pid,
-        "store": store.strip() or "7-11超商",
+        "store": store.strip() or "蝦皮店到店",
         "item": item.strip() or "網購包裹",
-        "code3": (code3.strip() or "888")[-3:].upper(),
+        "code3": (code3.strip() or "888").upper(),
         "cod": int(cod or 0),
         "due": due.strip() or "5日內取貨",
         "urgent": is_urg
@@ -145,7 +146,7 @@ def package_tracker_web_app(msg: str = ""):
 
     html = f"""<!DOCTYPE html><html><head><meta charset="UTF-8">
     <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no"/>
-    <title>📦 網購取貨倒數 ＆ 包裹代收戰情室 Pro</title>
+    <title>📦 網購取貨倒數 ＆ 蝦皮智取店戰情室 Pro</title>
     <style>
       * {{ box-sizing: border-box; -webkit-tap-highlight-color: transparent; }}
       body {{ margin: 0; padding: 0 0 92px 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif; background: radial-gradient(circle at top right, #162238, #0B0E14 55%); color: #F8F9FA; min-height: 100vh; }}
@@ -176,7 +177,7 @@ def package_tracker_web_app(msg: str = ""):
       .tab.active {{ color: #38BDF8; }}
       .tab-cta {{ background: linear-gradient(135deg, #0284C7, #2563EB); color: #fff; padding: 8px 14px; border-radius: 20px; font-size: 12px; }}
     </style></head><body>
-    <div class="topbar"><h1>📦 取貨倒數 ＆ 包裹戰情室</h1><span class="badge-pro">物流管家 Pro</span></div>
+    <div class="topbar"><h1>📦 取貨倒數 ＆ 蝦皮智取戰情室</h1><span class="badge-pro">物流管家 Pro</span></div>
     <div id="page-list" class="page active"><div class="wrap">
       {toast_html}
       <div class="kpi-grid">
@@ -187,8 +188,8 @@ def package_tracker_web_app(msg: str = ""):
       <div class="chips">
         <div class="chip active" onclick="setFilter('all', this)">📦 全部待領</div>
         <div class="chip" onclick="setFilter('urgent', this)">🔥 48H急件</div>
-        <div class="chip" onclick="setFilter('cvs', this)">🏪 超商取貨</div>
         <div class="chip" onclick="setFilter('shopee', this)">🛍️ 蝦皮店到店</div>
+        <div class="chip" onclick="setFilter('cvs', this)">🏪 7-11／全家</div>
         <div class="chip" onclick="setFilter('guard', this)">🏢 社區警衛室</div>
       </div>
       <div id="pkg-box"></div>
@@ -196,18 +197,18 @@ def package_tracker_web_app(msg: str = ""):
 
     <div id="page-add" class="page"><div class="wrap">
       <div class="pkg-card">
-        <div style="font-size:17px;font-weight:900;color:#38BDF8;margin-bottom:4px;">➕ 登記新包裹 ＆ 設定取貨倒數</div>
-        <div style="font-size:12px;color:#94A3B8;">登記後系統自動計算備妥現金總額，支援一鍵亮碼與請家人代領：</div>
+        <div style="font-size:17px;font-weight:900;color:#38BDF8;margin-bottom:4px;">➕ 登記新包裹（支援蝦皮智取6碼）</div>
+        <div style="font-size:12px;color:#94A3B8;">登記後自動計算備妥現金總額，支援櫃檯亮碼與請家人代領：</div>
         <form action="{S}api{S}pkg_add" method="post">
           <select name="store" class="field">
+            <option value="蝦皮店到店">🛍️ 蝦皮店到店 ／ 智取店</option>
             <option value="7-11超商">🏪 7-11 超商取貨</option>
             <option value="全家超商">🏪 全家超商取貨</option>
-            <option value="蝦皮店到店">🛍️ 蝦皮店到店／智取店</option>
             <option value="萊爾富超商">🏪 萊爾富 ／ OK 超商</option>
             <option value="社區警衛室">🏢 社區警衛室 ／ 管理室代收</option>
           </select>
           <input name="item" class="field" placeholder="📦 包裹內容物（如：蝦皮生活用品、momo衛生紙）" required/>
-          <input name="code3" class="field" placeholder="🔢 取貨編號末三碼 ／ 管理室貨號（如：852 或 A04）" maxlength="6" required/>
+          <input name="code3" class="field" placeholder="🔢 智取店6位取件碼 或 超商末三碼（如：839201 或 852）" maxlength="8" required/>
           <input name="cod" type="number" class="field" placeholder="💵 貨到付款金額（已付款請填 0）" value="0"/>
           <input name="due" class="field" placeholder="⏰ 截止日期（如：11/28 前取貨 或 明日截止）" value="5日內截止取貨"/>
           <select name="urgent" class="field">
@@ -232,8 +233,8 @@ def package_tracker_web_app(msg: str = ""):
       function renderPkgs() {{
         const list = PKGS.filter(p => {{
           if (curMode === 'urgent') return p.urgent;
-          if (curMode === 'cvs') return p.store.includes('7-11') || p.store.includes('全家') || p.store.includes('萊爾富') || p.store.includes('OK');
           if (curMode === 'shopee') return p.store.includes('蝦皮');
+          if (curMode === 'cvs') return p.store.includes('7-11') || p.store.includes('全家') || p.store.includes('萊爾富') || p.store.includes('OK');
           if (curMode === 'guard') return p.store.includes('警衛') || p.store.includes('管理室');
           return true;
         }});
@@ -242,8 +243,9 @@ def package_tracker_web_app(msg: str = ""):
         box.innerHTML = list.map((p, idx) => {{
           const codTag = p.cod > 0 ? `<span style="color:#FBBF24;font-weight:900;">💵 貨到付款 $${{p.cod}}</span>` : `<span style="color:#34D399;font-weight:800;">✅ 已付款（0元純取貨）</span>`;
           const mapU = `https:{S}{S}://google.com{S}?q=${{encodeURIComponent(p.store)}}`;
-          const helpTxt = '📦【麻煩幫我代領包裹】' + NL + '• 取貨地點：' + p.store + NL + '• 編號末三碼：' + p.code3 + NL + '• 包裹內容：' + p.item + NL + '• 應付金額：' + (p.cod > 0 ? '$' + p.cod + ' 元' : '已付款免付錢') + NL + '謝謝你！';
+          const helpTxt = '📦【麻煩幫我代領包裹】' + NL + '• 取貨地點：' + p.store + NL + '• 取件碼/末三碼：' + p.code3 + NL + '• 包裹內容：' + p.item + NL + '• 應付金額：' + (p.cod > 0 ? '$' + p.cod + ' 元' : '已付款免付錢') + NL + '謝謝你！';
           const lineHelpU = `https:{S}{S}line.me{S}R{S}share?text=${{encodeURIComponent(helpTxt)}}`;
+          const codeLabel = String(p.code3).length >= 5 ? '智取店取件碼' : '店員報號末三碼';
           return `<div class="pkg-card ${{p.urgent ? 'urgent' : ''}}">
             <div style="display:flex;justify-content:space-between;align-items:center;">
               <span style="font-size:12px;font-weight:800;color:#38BDF8;">${{p.store}}</span>
@@ -251,7 +253,7 @@ def package_tracker_web_app(msg: str = ""):
             </div>
             <div style="font-size:17px;font-weight:900;color:#fff;margin-top:4px;">${{p.item}}</div>
             <div class="code-box">
-              <div><div style="font-size:10px;color:#94A3B8;">店員報號末三碼</div><div style="font-size:22px;font-weight:900;color:#38BDF8;letter-spacing:2px;">#${{p.code3}}</div></div>
+              <div><div style="font-size:10px;color:#94A3B8;">${{codeLabel}}</div><div style="font-size:22px;font-weight:900;color:#38BDF8;letter-spacing:2px;">#${{p.code3}}</div></div>
               <div style="text-align:right;">${{codTag}}<div style="font-size:11px;color:#94A3B8;margin-top:2px;">結帳亮碼快速核對</div></div>
             </div>
             <div class="btn-row">
@@ -271,7 +273,7 @@ def make_pkg_app_card():
     app_uri = f"{RENDER_BASE_URL}/pkg_app?openExternalBrowser=1"
     add_uri = f"https:{S}{S}line.me{S}R{S}oaMessage{S}{LINE_BOT_BASIC_ID}{S}?{urllib.parse.quote('登記包裹:')}"
     guard_uri = f"https:{S}{S}line.me{S}R{S}oaMessage{S}{LINE_BOT_BASIC_ID}{S}?{urllib.parse.quote('警衛室:')}"
-    share_txt = urllib.parse.quote(f"📦【網購超商取貨倒數 ＆ 社區包裹代收管家 Pro】\n直接貼上超商取貨簡訊自動辨識末三碼與貨到付款金額，一鍵請家人代領！\n📲 免費加入：\nhttps:{S}{S}line.me{S}R{S}ti{S}p{S}{LINE_BOT_BASIC_ID}")
+    share_txt = urllib.parse.quote(f"📦【網購超商取貨倒數 ＆ 蝦皮智取店管家 Pro】\n直接貼上蝦皮／超商取貨簡訊自動辨識 6 碼取件碼與貨到付款金額，一鍵請家人代領！\n📲 免費加入：\nhttps:{S}{S}line.me{S}R{S}ti{S}p{S}{LINE_BOT_BASIC_ID}")
     share_uri = f"https:{S}{S}line.me{S}R{S}share?text={share_txt}"
 
     total_cnt = len(LOCAL_PACKAGES)
@@ -287,8 +289,8 @@ def make_pkg_app_card():
     bubble_1 = BubbleContainer(
         size="mega",
         header=BoxComponent(layout="vertical", background_color="#0D111A", padding_all="16px", contents=[
-            TextComponent(text="📦 取貨倒數 ＆ 包裹代收管家 Pro", weight="bold", size="md", color="#E0F2FE", wrap=True),
-            TextComponent(text="貼上取貨簡訊自動辨識、備妥現金統計、請家人代領", size="xs", color="#38BDF8", weight="bold", wrap=True, margin="xs")
+            TextComponent(text="📦 取貨倒數 ＆ 蝦皮包裹管家 Pro", weight="bold", size="md", color="#E0F2FE", wrap=True),
+            TextComponent(text="貼上取貨簡訊自動辨識6碼、備妥現金、請家人代領", size="xs", color="#38BDF8", weight="bold", wrap=True, margin="xs")
         ]),
         body=BoxComponent(layout="vertical", spacing="sm", background_color="#FFFFFF", contents=[
             BoxComponent(layout="horizontal", spacing="sm", contents=[
@@ -302,18 +304,18 @@ def make_pkg_app_card():
                 ])
             ]),
             BoxComponent(layout="vertical", background_color="#F0F9FF", corner_radius="14px", padding_all="12px", contents=[
-                TextComponent(text="📋 最新待領包裹看板（可直接貼簡訊新增）：", size="xs", color="#0369A1", weight="bold"),
+                TextComponent(text="📋 最新待領包裹看板（可直接貼蝦皮簡訊新增）：", size="xs", color="#0369A1", weight="bold"),
                 TextComponent(text=preview_txt, size="xs", color="#0F172A", wrap=True, margin="xs")
             ])
         ]),
         footer=BoxComponent(layout="vertical", spacing="sm", background_color="#FFFFFF", contents=[
             ButtonComponent(style="primary", color="#0284C7", height="sm", action=URIAction(label="🚀 開啟全螢幕取貨倒數戰情室 App", uri=app_uri)),
             BoxComponent(layout="horizontal", spacing="sm", contents=[
-                ButtonComponent(style="primary", color="#10B981", height="sm", action=URIAction(label="➕ 登記超商包裹", uri=add_uri)),
+                ButtonComponent(style="primary", color="#10B981", height="sm", action=URIAction(label="➕ 登記網購包裹", uri=add_uri)),
                 ButtonComponent(style="secondary", height="sm", action=URIAction(label="🏢 警衛室代收", uri=guard_uri))
             ]),
             BoxComponent(layout="horizontal", spacing="sm", contents=[
-                ButtonComponent(style="secondary", height="sm", action=MessageAction(label="🏪 導航附近超商", text="附近超商")),
+                ButtonComponent(style="secondary", height="sm", action=MessageAction(label="🛍️ 導航蝦皮/超商", text="附近超商")),
                 ButtonComponent(style="primary", color="#F59E0B", height="sm", action=MessageAction(label="✅ 領取最新包裹", text="領取最新包裹"))
             ])
         ])
@@ -322,11 +324,11 @@ def make_pkg_app_card():
     host = "maps." + "google.com"
     tools_btns = [
         BoxComponent(layout="horizontal", spacing="sm", contents=[
-            ButtonComponent(style="primary", color="#0284C7", height="sm", action=URIAction(label="🏪 7-11 門市", uri=f"https:{S}{S}{host}{S}?q=7-11")),
-            ButtonComponent(style="primary", color="#10B981", height="sm", action=URIAction(label="🏪 全家門市", uri=f"https:{S}{S}{host}{S}?q=全家便利商店"))
+            ButtonComponent(style="primary", color="#F97316", height="sm", action=URIAction(label="🛍️ 蝦皮店到店", uri=f"https:{S}{S}{host}{S}?q=蝦皮店到店")),
+            ButtonComponent(style="primary", color="#0284C7", height="sm", action=URIAction(label="🏪 7-11 門市", uri=f"https:{S}{S}{host}{S}?q=7-11"))
         ]),
         BoxComponent(layout="horizontal", spacing="sm", contents=[
-            ButtonComponent(style="secondary", height="sm", action=URIAction(label="🛍️ 蝦皮店到店", uri=f"https:{S}{S}{host}{S}?q=蝦皮店到店")),
+            ButtonComponent(style="secondary", height="sm", action=URIAction(label="🏪 全家便利商店", uri=f"https:{S}{S}{host}{S}?q=全家便利商店")),
             ButtonComponent(style="secondary", height="sm", action=MessageAction(label="🎬 開箱錄影須知", text="開箱須知"))
         ]),
         ButtonComponent(style="primary", color="#2563EB", height="sm", action=URIAction(label="📤 分享給家人／網購同好一起管包裹", uri=share_uri))
@@ -337,8 +339,8 @@ def make_pkg_app_card():
     bubble_2 = BubbleContainer(
         size="mega",
         header=BoxComponent(layout="vertical", background_color="#0D111A", padding_all="16px", contents=[
-            TextComponent(text="🗺️ 超商取貨導航 ＆ 網購防雷工具", weight="bold", size="md", color="#E0F2FE", wrap=True),
-            TextComponent(text="一鍵找 7-11、全家、蝦皮店到店與開箱退貨須知", size="xs", color="#38BDF8", weight="bold", wrap=True, margin="xs")
+            TextComponent(text="🗺️ 蝦皮店到店／超商導航 ＆ 防雷工具", weight="bold", size="md", color="#E0F2FE", wrap=True),
+            TextComponent(text="一鍵找蝦皮智取店、7-11、全家與開箱錄影退貨須知", size="xs", color="#38BDF8", weight="bold", wrap=True, margin="xs")
         ]),
         body=BoxComponent(layout="vertical", spacing="xs", background_color="#FFFFFF", contents=[
             TextComponent(text="👈 向左滑動返回「取貨倒數戰情室主畫面」", size="xxs", color="#64748B", weight="bold")
@@ -359,7 +361,7 @@ async def callback(request: Request):
 @handler.add(FollowEvent)
 def on_follow(event):
     card = make_pkg_app_card()
-    line_bot_api.reply_message(event.reply_token, FlexSendMessage(alt_text="📦 網購取貨倒數 ＆ 包裹代收管家 Pro 已啟動", contents=card))
+    line_bot_api.reply_message(event.reply_token, FlexSendMessage(alt_text="📦 網購取貨倒數 ＆ 蝦皮智取店管家 Pro 已啟動", contents=card))
 
 @handler.add(MessageEvent, message=TextMessage)
 def on_text(event):
@@ -378,7 +380,7 @@ def on_text(event):
                 line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🎉 目前沒有待領包裹囉！"))
             return
 
-        # 2. 開箱錄影須知與附近超商快捷
+        # 2. 開箱錄影須知與附近蝦皮／超商快捷
         if txt == "開箱須知":
             line_bot_api.reply_message(event.reply_token, TextSendMessage(text="🎬【網購開箱防雷 3 步驟】\n1. 拆封前先拍清楚外箱「物流託運單條碼」與封箱膠帶。\n2. 一鏡到底錄影開箱並清點商品數量與外觀。\n3. 若有缺件或破損，24 小時內透過蝦皮／momo 系統申請退貨最安心！"))
             return
@@ -386,17 +388,17 @@ def on_text(event):
         if txt == "附近超商":
             S = chr(47)
             host = "maps." + "google.com"
-            u = f"https:{S}{S}{host}{S}?q={urllib.parse.quote('便利商店 蝦皮店到店')}"
-            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🏪 點擊下方連結一鍵導航附近超商與蝦皮店到店：\n{u}"))
+            u = f"https:{S}{S}{host}{S}?q={urllib.parse.quote('蝦皮店到店 便利商店')}"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"🛍️ 點擊下方連結一鍵導航附近蝦皮店到店與超商門市：\n{u}"))
             return
 
-        # 3. 偵測超商取貨簡訊或「登記包裹: / 警衛室:」指令自動解析入庫
-        sms_keywords = ["簡訊", "取貨", "到店", "門市", "截止", "包裹", "編號", "末三碼", "貨到付款", "蝦皮", "全家", "7-11", "萊爾富", "警衛室", "管理室", "登記包裹:"]
+        # 3. 偵測蝦皮／超商取貨簡訊或「登記包裹: / 警衛室:」指令自動解析入庫
+        sms_keywords = ["簡訊", "取貨", "取件碼", "智取店", "到店", "門市", "截止", "包裹", "編號", "末三碼", "貨到付款", "蝦皮", "全家", "7-11", "萊爾富", "警衛室", "管理室", "登記包裹:"]
         is_add_cmd = txt.startswith("登記包裹:") or txt.startswith("登記包裹：") or txt.startswith("警衛室:") or txt.startswith("警衛室：")
         if is_add_cmd or (any(k in txt for k in sms_keywords) and txt not in ["包裹", "查包裹", "我的包裹"]):
             raw = txt.split(":", 1)[-1].split("：", 1)[-1].strip() if is_add_cmd else txt
             if not raw:
-                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="📦 請直接貼上超商取貨簡訊，或輸入「登記包裹:7-11 蝦皮衣服 390元 末三碼852」喔！"))
+                line_bot_api.reply_message(event.reply_token, TextSendMessage(text="📦 請直接貼上蝦皮／超商取貨簡訊，或輸入「登記包裹:蝦皮店到店 衣服 390元 取件碼839201」喔！"))
                 return
             parsed = parse_pickup_sms(raw)
             if txt.startswith("警衛室"):
@@ -429,6 +431,6 @@ def on_text(event):
 
         # 4. 預設顯示物流戰情室雙卡輪播主畫面
         card = make_pkg_app_card()
-        line_bot_api.reply_message(event.reply_token, FlexSendMessage(alt_text="📦 取貨倒數 ＆ 包裹代收管家 Pro", contents=card))
+        line_bot_api.reply_message(event.reply_token, FlexSendMessage(alt_text="📦 取貨倒數 ＆ 蝦皮包裹管家 Pro", contents=card))
     except Exception as e:
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"📦 系統小提示：{str(e)[:60]}（請輸入「包裹」刷新畫面）"))
