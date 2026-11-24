@@ -18,7 +18,7 @@ GOOGLE_SHEET_API = "https://script.google.com/macros/s/AKfycbwcGdq2DqYRAM7-t8rcf
 # ⚠️ 2. 請填入這個包裹管家機器人的 LINE 官方帳號 ID（包含 @ 符號，例如 @123abcde）
 LINE_BOT_BASIC_ID = "@699zmvvf"
 # ⚠️ 3. 請填入這個包裹管家機器人的 Render 公開網址（結尾不要加斜線）
-RENDER_BASE_URL = "https://onrender.com"
+RENDER_BASE_URL = "https://taiwan-package-tracker-bot.onrender.com"
 # ⚠️ 4. 可填入您的 Notion 網購高回饋信用卡／居家收納／開箱好物嚴選館網址（未填自動隱藏）
 NOTION_SHOPPING_URL = ""
 
